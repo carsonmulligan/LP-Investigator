@@ -1,58 +1,153 @@
-/* styles.css for LP-Investigator Chrome Extension */
+/* styles.css for LP Investigator Chrome Extension */
 
 body {
-    font-family: Arial, sans-serif;
-    min-width: 300px;
-    min-height: 200px;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    min-width: 340px;
+    min-height: 260px;
     margin: 0;
     padding: 0;
-    background: #f8f9fa;
+    background: #f4f6fb;
 }
 
 #container {
-    padding: 16px;
+    padding: 22px 18px 18px 18px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+    max-width: 370px;
+    margin: 0 auto;
 }
 
 h2 {
     margin-top: 0;
-    font-size: 1.2em;
-    color: #333;
+    font-size: 1.3em;
+    color: #1976d2;
+    letter-spacing: 1px;
+    margin-bottom: 18px;
+    text-align: center;
 }
 
-button {
-    margin: 4px 0;
-    padding: 8px 16px;
+.row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+    gap: 8px;
+}
+
+.label {
+    min-width: 48px;
     font-size: 1em;
+    color: #333;
+    font-weight: 500;
+}
+
+.input {
+    flex: 1;
+    padding: 7px 10px;
+    border: 1.5px solid #b0bec5;
+    border-radius: 5px;
+    font-size: 1em;
+    background: #f8fafc;
+    transition: border 0.2s;
+}
+
+.input:focus {
+    border: 1.5px solid #1976d2;
+    outline: none;
+}
+
+.icon-btn {
+    background: #1976d2;
+    color: #fff;
     border: none;
-    border-radius: 4px;
-    background: #0078d7;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    font-size: 1.3em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    margin-left: 4px;
+    box-shadow: 0 1px 2px rgba(25, 118, 210, 0.08);
+}
+
+.icon-btn:disabled {
+    background: #b0bec5;
+    cursor: not-allowed;
+}
+
+.icon-btn:hover:enabled {
+    background: #1565c0;
+}
+
+.main-btn {
+    width: 100%;
+    padding: 10px 0;
+    font-size: 1.1em;
+    border: none;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #1976d2 60%, #42a5f5 100%);
     color: white;
+    font-weight: 600;
     cursor: pointer;
     transition: background 0.2s;
+    box-shadow: 0 2px 6px rgba(25, 118, 210, 0.08);
 }
 
-button:hover {
-    background: #005fa3;
+.main-btn:disabled {
+    background: #b0bec5;
+    cursor: not-allowed;
+}
+
+.main-btn:hover:enabled {
+    background: linear-gradient(90deg, #1565c0 60%, #1976d2 100%);
 }
 
 #status {
-    margin: 8px 0;
-    color: #0078d7;
+    margin: 12px 0 8px 0;
+    color: #1976d2;
     font-weight: bold;
+    min-height: 18px;
+    text-align: center;
 }
 
 #url-list {
-    margin: 12px 0;
+    margin: 10px 0 0 0;
     padding-left: 20px;
     max-height: 120px;
     overflow-y: auto;
-    background: #fff;
-    border: 1px solid #ddd;
+    background: #f8fafc;
+    border: 1px solid #e3e6ea;
     border-radius: 4px;
 }
 
 #url-list li {
-    font-size: 0.95em;
+    font-size: 0.97em;
     margin-bottom: 4px;
     word-break: break-all;
+}
+
+.row-actions {
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.action-btn {
+    padding: 6px 16px;
+    font-size: 0.98em;
+    border: none;
+    border-radius: 4px;
+    background: #e3e6ea;
+    color: #1976d2;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.action-btn:hover:enabled {
+    background: #1976d2;
+    color: #fff;
 } 

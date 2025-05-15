@@ -3,18 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LP-Investigator</title>
+    <title>LP Investigator</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div id="container">
-        <h2>LP-Investigator</h2>
-        <button id="toggle-recording">Start Recording</button>
-        <button id="clear-list" style="display:none;">Clear List</button>
+        <h2>LP Investigator</h2>
+        <div class="row">
+            <label for="folder-select" class="label">Folder</label>
+            <select id="folder-select" class="input">
+                <option value="">Select...</option>
+            </select>
+        </div>
+        <div class="row">
+            <label for="new-folder" class="label">New</label>
+            <input type="text" id="new-folder" class="input" placeholder="New folder name" autocomplete="off" />
+            <button id="create-folder" class="icon-btn" title="Create Folder">+</button>
+        </div>
+        <div class="row">
+            <button id="toggle-recording" class="main-btn" disabled>Start Recording</button>
+        </div>
         <div id="status"></div>
         <ul id="url-list"></ul>
-        <button id="copy-list" style="display:none;">Copy List</button>
+        <div class="row row-actions">
+            <button id="copy-list" class="action-btn" style="display:none;">Copy List</button>
+            <button id="clear-list" class="action-btn" style="display:none;">Clear Folder</button>
+        </div>
     </div>
     <script src="popup.js"></script>
 </body>
-</html> 
+</html>
+
