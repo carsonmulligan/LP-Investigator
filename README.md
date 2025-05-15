@@ -46,4 +46,6 @@ MIT
 
 ---
 
-**Enjoy tracking your browsing sessions!** 
+**Enjoy tracking your browsing sessions!**
+
+_Last updated: 2024-06-09_ 
