@@ -73,8 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ? `Recording in folder: ${currentFolder || ''}`
             : '';
             
-        // Load saved content
-        const selectedFolder = isRecording ? currentFolder : getChosenFolder();
+        // Load saved content - reuse the selectedFolder variable
         if (selectedFolder) {
             chrome.runtime.sendMessage({
                 type: 'GET_SAVED_CONTENT',
