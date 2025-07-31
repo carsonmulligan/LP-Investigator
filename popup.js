@@ -105,7 +105,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!folderName) return;
         chrome.runtime.sendMessage({ type: 'CREATE_FOLDER', folderName }, () => {
             newFolderInput.value = '';
-            setTimeout(refreshState, 100);
+            // Set the dropdown to the newly created folder
+            setTimeout(() => {
+                folderSelect.value = folderName;
+                refreshState();
+            }, 100);
         });
     });
 
