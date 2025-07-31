@@ -5,7 +5,8 @@
   "description": "Record and export a list of websites visited during a session.",
   "permissions": [
     "tabs",
-    "storage"
+    "storage",
+    "activeTab"
   ],
   "background": {
     "service_worker": "background.js"

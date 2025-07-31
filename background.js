@@ -1,8 +1,13 @@
 // background.js for LP-Investigator Chrome Extension 
+importScripts('db.js');
 
 let isRecording = false;
 let folders = {};
 let currentFolder = null;
+
+// Initialize database
+let db = new SimpleDB();
+db.init().catch(console.error);
 
 // Initialize from storage
 chrome.storage.local.get(['folders'], (result) => {
