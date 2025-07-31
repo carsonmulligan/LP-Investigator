@@ -1,431 +1,291 @@
-# Ultra-Simple Investigation Tool
+LP-INVESTIGATOR: IMAGE AND PAGE CONTENT STORAGE PLAN
+=====================================================
 
-## Core Functionality (Only 3 Things)
-1. **Store Links** - Save URLs to investigation folders
-2. **Save Images** - Download and store images from web pages  
-3. **Pull Full Content** - Extract all text from any page and save it
+PROJECT OVERVIEW
+----------------
+Enhance LP-Investigator Chrome extension to capture and store:
+- Screenshots of visited pages
+- Extracted text content
+- Key images from pages
+- Metadata and timestamps
 
-## Simplified Data Model
+TECHNICAL ARCHITECTURE
+----------------------
 
-### IndexedDB Schema (Minimal)
-```javascript
-// Database: SimpleInvestigationDB
-const DB_CONFIG = {
-  name: 'SimpleInvestigationDB', 
-  version: 1,
-  stores: {
-    // Investigation folders
-    investigations: {
-      keyPath: 'id'
-    },
-    // Everything else - links, images, content - goes here
-    items: {
-      keyPath: 'id',
-      indexes: {
-        investigation_id: { unique: false },
-        type: { unique: false }, // 'link', 'image', 'content'
-        added_at: { unique: false }
-      }
-    }
-  }
-};
-```
+Storage Design:
+- Chrome.storage.local: Metadata, URLs, and IndexedDB references
+- IndexedDB: Binary data (images, screenshots) and large text content
+- Hybrid approach for optimal performance
 
-### Single Item Record (Handles Everything)
-```javascript
-// Universal item record - handles links, images, and content
-{
-  id: 'item_1234567890',
-  investigation_id: 'inv_1234567890', 
-  type: 'link' | 'image' | 'content',
-  
-  // Common fields
-  url: 'https://example.com',
-  title: 'Page Title',
-  added_at: '2025-07-31T10:30:00Z',
-  
-  // Type-specific data
-  data: {
-    // For type='link': just URL and title
-    // For type='image': { imageBlob: Blob, filename: 'image.jpg' }
-    // For type='content': { text: 'full page text content' }
-  }
-}
-```
+Data Structure:
+- Folders contain enhanced URL entries
+- Each URL entry references content in IndexedDB
+- Content includes screenshots, text, and extracted images
 
-## Minimal Chrome Extension Structure
+IMPLEMENTATION PHASES
+---------------------
 
-```
-LP-Investigator/
-├── manifest.json (add contextMenus permission)
-├── background.js (minimal service worker)
-├── popup.html/js/css (your existing UI, barely modified)
-├── db.js (simple IndexedDB wrapper)
-└── content-extractor.js (page text extraction)
-```
+PHASE 1: Foundation Setup (Week 1)
+----------------------------------
+1. Update manifest.json permissions
+   - Add "activeTab", "scripting", "host_permissions"
+   - Maintain existing "tabs" and "storage"
 
-## Implementation Files
+2. Create IndexedDB wrapper module
+   - Initialize database with versioning
+   - Define object stores for content
+   - Implement CRUD operations
+   - Add error handling and fallbacks
 
-### 1. Simple Database (db.js)
-```javascript
-class SimpleDB {
-  constructor() {
-    this.db = null;
-  }
+3. Update storage schema
+   - Migrate existing folder structure
+   - Add content reference fields
+   - Implement backward compatibility
 
-  async init() {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open('SimpleInvestigationDB', 1);
-      
-      request.onsuccess = () => {
-        this.db = request.result;
-        resolve();
-      };
-      
-      request.onupgradeneeded = (event) => {
-        const db = event.target.result;
-        
-        // Investigations store
-        db.createObjectStore('investigations', { keyPath: 'id' });
-        
-        // Universal items store
-        const itemStore = db.createObjectStore('items', { keyPath: 'id' });
-        itemStore.createIndex('investigation_id', 'investigation_id');
-        itemStore.createIndex('type', 'type');
-        itemStore.createIndex('added_at', 'added_at');
-      };
-    });
-  }
+4. Create content capture service
+   - Basic architecture for content extraction
+   - Message passing between components
+   - Queue system for capture tasks
 
-  // Add any item (link, image, or content)
-  async addItem(item) {
-    const transaction = this.db.transaction(['items'], 'readwrite');
-    return transaction.objectStore('items').add(item);
-  }
+PHASE 2: Text Content Capture (Week 2)
+--------------------------------------
+1. Develop content script
+   - Extract page title and meta description
+   - Capture main text content
+   - Get Open Graph data
+   - Extract heading structure
 
-  // Get all items for an investigation
-  async getItems(investigationId) {
-    const transaction = this.db.transaction(['items'], 'readonly');
-    const store = transaction.objectStore('items');
-    const index = store.index('investigation_id');
-    
-    return new Promise((resolve) => {
-      const request = index.getAll(investigationId);
-      request.onsuccess = () => resolve(request.result);
-    });
-  }
+2. Text processing pipeline
+   - Clean and sanitize HTML
+   - Remove scripts and styles
+   - Extract readable text
+   - Compress for storage
 
-  // Investigation management (same as before)
-  async addInvestigation(investigation) {
-    const transaction = this.db.transaction(['investigations'], 'readwrite');
-    return transaction.objectStore('investigations').add(investigation);
-  }
+3. Storage integration
+   - Save text to IndexedDB
+   - Update URL metadata
+   - Link content to folders
 
-  async getInvestigations() {
-    const transaction = this.db.transaction(['investigations'], 'readonly');
-    const store = transaction.objectStore('investigations');
-    
-    return new Promise((resolve) => {
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
-    });
-  }
-}
-```
+4. UI updates for text display
+   - Show text preview in popup
+   - Add text search capability
+   - Display extraction status
 
-### 2. Updated manifest.json
-```json
-{
-  "manifest_version": 3,
-  "name": "Investigation Tool",
-  "version": "2.0",
-  "description": "Save links, images, and page content for investigations",
-  "permissions": [
-    "tabs",
-    "storage", 
-    "contextMenus",
-    "activeTab"
-  ],
-  "background": {
-    "service_worker": "background.js"
-  },
-  "action": {
-    "default_popup": "popup.html"
-  }
-}
-```
+PHASE 3: Screenshot Capture (Week 3)
+------------------------------------
+1. Implement screenshot service
+   - Capture visible viewport
+   - Generate thumbnails
+   - Handle capture errors
 
-### 3. Enhanced Background Worker (background.js)
-```javascript
-// Import your simple DB
-importScripts('db.js');
+2. Full page screenshot (stretch goal)
+   - Scroll and capture sections
+   - Stitch images together
+   - Handle dynamic content
 
-let db = new SimpleDB();
-let isRecording = false;
-let currentInvestigation = null;
+3. Image optimization
+   - Convert to WebP format
+   - Multiple resolution options
+   - Compression settings
 
-// Initialize database
-db.init();
+4. UI for screenshot viewing
+   - Thumbnail grid view
+   - Full image modal
+   - Download options
 
-// Create context menus
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: "save-link",
-    title: "Save Link to Investigation",
-    contexts: ["link"]
-  });
+PHASE 4: Advanced Features (Week 4)
+-----------------------------------
+1. Image extraction from pages
+   - Identify key images (hero, og:image)
+   - Download and store locally
+   - Track image sources
 
-  chrome.contextMenus.create({
-    id: "save-image", 
-    title: "Save Image to Investigation",
-    contexts: ["image"]
-  });
+2. Storage management
+   - Implement storage quotas
+   - FIFO deletion policy
+   - Storage usage indicators
+   - Cleanup tools
 
-  chrome.contextMenus.create({
-    id: "save-page-content",
-    title: "Save Full Page Content", 
-    contexts: ["page"]
-  });
-});
+3. Export enhancements
+   - Export with embedded content
+   - Multiple format options
+   - Selective export
 
-// Handle context menu clicks
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (!currentInvestigation) {
-    console.log('No investigation selected');
-    return;
-  }
+4. Performance optimization
+   - Lazy loading
+   - Background processing
+   - Caching layer
 
-  const timestamp = Date.now();
-  const itemId = `item_${timestamp}`;
+TECHNICAL REQUIREMENTS
+----------------------
 
-  if (info.menuItemId === "save-link") {
-    // Save link
-    const item = {
-      id: itemId,
-      investigation_id: currentInvestigation,
-      type: 'link',
-      url: info.linkUrl,
-      title: `Link from ${tab.title}`,
-      added_at: new Date().toISOString(),
-      data: {}
-    };
-    await db.addItem(item);
-  }
-  
-  else if (info.menuItemId === "save-image") {
-    // Download and save image
-    try {
-      const response = await fetch(info.srcUrl);
-      const imageBlob = await response.blob();
-      const filename = info.srcUrl.split('/').pop() || 'image.jpg';
-      
-      const item = {
-        id: itemId,
-        investigation_id: currentInvestigation,
-        type: 'image',
-        url: info.srcUrl,
-        title: filename,
-        added_at: new Date().toISOString(),
-        data: {
-          imageBlob: imageBlob,
-          filename: filename,
-          sourceUrl: tab.url
-        }
-      };
-      await db.addItem(item);
-    } catch (error) {
-      console.error('Failed to save image:', error);
-    }
-  }
-  
-  else if (info.menuItemId === "save-page-content") {
-    // Extract full page content
-    try {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        function: extractPageContent
-      });
-      
-      const pageText = results[0].result;
-      
-      const item = {
-        id: itemId,
-        investigation_id: currentInvestigation,
-        type: 'content',
-        url: tab.url,
-        title: tab.title,
-        added_at: new Date().toISOString(),
-        data: {
-          text: pageText,
-          extractedFrom: tab.url
-        }
-      };
-      await db.addItem(item);
-    } catch (error) {
-      console.error('Failed to extract page content:', error);
-    }
-  }
-});
+New Files:
+- content-script.js: DOM extraction
+- indexeddb-service.js: Database operations
+- capture-service.js: Screenshot/content capture
+- storage-migration.js: Schema updates
 
-// Function injected into page to extract content
-function extractPageContent() {
-  // Remove script and style elements
-  const scripts = document.querySelectorAll('script, style, nav, header, footer');
-  scripts.forEach(el => el.remove());
-  
-  // Get main content
-  const main = document.querySelector('main') || 
-                document.querySelector('[role="main"]') || 
-                document.querySelector('.content') ||
-                document.body;
-  
-  return main.innerText.trim();
-}
+Updated Files:
+- manifest.json: New permissions
+- background.js: Capture orchestration
+- popup.js: Enhanced UI
+- popup.html: New UI elements
 
-// Handle messages from popup (same as your existing code)
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  switch (message.type) {
-    case 'START_RECORDING':
-      isRecording = true;
-      currentInvestigation = message.investigationId;
-      sendResponse({ success: true });
-      break;
-      
-    case 'STOP_RECORDING':
-      isRecording = false;
-      currentInvestigation = null;
-      sendResponse({ success: true });
-      break;
-      
-    case 'CREATE_INVESTIGATION':
-      const investigation = {
-        id: `inv_${Date.now()}`,
-        name: message.name,
-        created_at: new Date().toISOString()
-      };
-      db.addInvestigation(investigation).then(() => {
-        sendResponse({ investigation });
-      });
-      return true;
-      
-    case 'GET_STATE':
-      db.getInvestigations().then(investigations => {
-        sendResponse({ 
-          isRecording, 
-          currentInvestigation, 
-          investigations 
-        });
-      });
-      return true;
-      
-    case 'GET_ITEMS':
-      db.getItems(message.investigationId).then(items => {
-        sendResponse({ items });
-      });
-      return true;
-  }
-});
+Dependencies:
+- No external libraries initially
+- Consider LZ-string for compression
+- Consider DOMPurify for sanitization
 
-// Auto-record URLs when recording (same as your existing code)
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (isRecording && currentInvestigation && changeInfo.status === 'complete' && tab.url && tab.url.startsWith('http')) {
-    const item = {
-      id: `item_${Date.now()}`,
-      investigation_id: currentInvestigation,
-      type: 'link',
-      url: tab.url,
-      title: tab.title,
-      added_at: new Date().toISOString(),
-      data: { autoRecorded: true }
-    };
-    await db.addItem(item);
-  }
-});
-```
+TESTING PLAN
+------------
 
-### 4. Minimal Popup Updates (popup.js changes)
-```javascript
-// Add this to your existing popup.js
+Unit Tests:
+- IndexedDB operations
+- Content extraction
+- Storage migration
+- Data compression
 
-// Display items with type icons
-function displayItems(items) {
-  const urlList = document.getElementById('url-list');
-  urlList.innerHTML = '';
-  
-  items.forEach(item => {
-    const li = document.createElement('li');
-    
-    let icon = '';
-    let displayText = '';
-    
-    if (item.type === 'link') {
-      icon = '🔗';
-      displayText = item.title || item.url;
-    } else if (item.type === 'image') {
-      icon = '📸';
-      displayText = item.data.filename || 'Image';
-    } else if (item.type === 'content') {
-      icon = '📄';
-      displayText = `Content from ${item.title}`;
-    }
-    
-    li.innerHTML = `
-      ${icon} <a href="${item.url}" target="_blank">${displayText}</a>
-      <small style="display: block; color: #666;">
-        Added: ${new Date(item.added_at).toLocaleString()}
-      </small>
-    `;
-    
-    urlList.appendChild(li);
-  });
-}
+Integration Tests:
+- Full capture workflow
+- Storage limits
+- Export functionality
+- Performance benchmarks
 
-// Update your existing refreshState function to load items
-function refreshState() {
-  chrome.runtime.sendMessage({ type: 'GET_STATE' }, (response) => {
-    updateUI(response);
-    
-    // Load items for selected investigation
-    const selectedInv = isRecording ? currentInvestigation : getSelectedInvestigation();
-    if (selectedInv) {
-      chrome.runtime.sendMessage({ 
-        type: 'GET_ITEMS', 
-        investigationId: selectedInv 
-      }, (itemsResponse) => {
-        displayItems(itemsResponse.items || []);
-      });
-    }
-  });
-}
-```
+Manual Testing:
+- Various website types
+- Large data sets
+- Edge cases (errors, offline)
+- Cross-browser compatibility
 
-## How It Works
+MIGRATION STRATEGY
+------------------
 
-### 1. Right-Click Anywhere
-- **Right-click link** → Save URL 
-- **Right-click image** → Download and save image blob
-- **Right-click page** → Extract all text content and save
+1. Version detection
+   - Check existing data structure
+   - Identify migration needs
 
-### 2. Auto-Recording (Your Existing Feature)
-- Start recording → All visited URLs saved automatically
-- Manual right-clicks still work during recording
+2. Data transformation
+   - Preserve existing folders/URLs
+   - Add new fields with defaults
+   - Maintain backward compatibility
 
-### 3. Simple Storage
-- Everything goes into one `items` table
-- Type field distinguishes links/images/content
-- All associated with investigation folders
+3. Progressive enhancement
+   - Features work with old data
+   - New data includes enhanced content
+   - No data loss during migration
 
-### 4. View Results
-- Your existing popup shows all items with icons
-- 🔗 for links, 📸 for images, 📄 for page content
-- Click any item to open original URL
+STORAGE CONSIDERATIONS
+----------------------
 
-## Key Benefits
+Limits:
+- IndexedDB: ~50% of available disk
+- Chrome.storage.local: 5MB
+- Per-folder soft limit: 100MB
+- Warning at 80% capacity
 
-✅ **Dead Simple** - Only 3 actions, minimal UI changes  
-✅ **No Processing** - Just raw storage, no OCR or text extraction  
-✅ **Fast** - Everything happens instantly  
-✅ **Reliable** - No complex background workers to break  
-✅ **Visual** - See exactly what you collected with type icons
+Optimization:
+- Text compression (70% reduction)
+- Image format conversion
+- Thumbnail generation
+- Selective capture options
 
-This gives you the core investigation workflow with minimal complexity. You can always add text processing later, but this gets you collecting data immediately!
+SECURITY & PRIVACY
+------------------
+
+Considerations:
+- No sensitive data capture
+- Sanitize HTML content
+- Secure storage practices
+- User consent for capture
+- Clear data on uninstall
+
+Excluded Content:
+- Password fields
+- Payment information
+- Private browsing sessions
+- Secure (banking) sites
+
+UI/UX ENHANCEMENTS
+------------------
+
+New UI Elements:
+- Content toggle switches
+- Storage usage meter
+- Preview thumbnails
+- Search functionality
+- Batch operations
+
+Settings:
+- Capture preferences
+- Quality settings
+- Storage limits
+- Auto-cleanup rules
+
+DELIVERABLES
+------------
+
+Week 1:
+- Updated manifest and permissions
+- IndexedDB service module
+- Basic storage migration
+
+Week 2:
+- Content script implementation
+- Text extraction working
+- Updated popup UI
+
+Week 3:
+- Screenshot capture functional
+- Thumbnail generation
+- Image viewer UI
+
+Week 4:
+- Storage management tools
+- Export with content
+- Performance optimizations
+- Documentation
+
+SUCCESS METRICS
+---------------
+
+Technical:
+- <3s capture time per page
+- <100ms UI response time
+- 90% compression ratio for text
+- Zero data loss during migration
+
+User Experience:
+- One-click capture toggle
+- Instant preview access
+- Intuitive storage management
+- Reliable export function
+
+RISKS & MITIGATIONS
+-------------------
+
+Risk: Storage quota exceeded
+Mitigation: Implement quotas and cleanup
+
+Risk: Slow capture performance
+Mitigation: Queue system and background processing
+
+Risk: Memory issues with large images
+Mitigation: Stream processing and size limits
+
+Risk: Complex migration fails
+Mitigation: Backup and rollback mechanism
+
+FUTURE ENHANCEMENTS
+-------------------
+
+Potential Features:
+- OCR for image text
+- Page change detection
+- Annotation tools
+- Cloud backup option
+- Advanced search filters
+- Batch processing
+- API for external tools
+- Mobile companion app
+
+END OF PLAN

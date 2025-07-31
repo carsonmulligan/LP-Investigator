@@ -1,0 +1,431 @@
+# Ultra-Simple Investigation Tool
+
+## Core Functionality (Only 3 Things)
+1. **Store Links** - Save URLs to investigation folders
+2. **Save Images** - Download and store images from web pages  
+3. **Pull Full Content** - Extract all text from any page and save it
+
+## Simplified Data Model
+
+### IndexedDB Schema (Minimal)
+```javascript
+// Database: SimpleInvestigationDB
+const DB_CONFIG = {
+  name: 'SimpleInvestigationDB', 
+  version: 1,
+  stores: {
+    // Investigation folders
+    investigations: {
+      keyPath: 'id'
+    },
+    // Everything else - links, images, content - goes here
+    items: {
+      keyPath: 'id',
+      indexes: {
+        investigation_id: { unique: false },
+        type: { unique: false }, // 'link', 'image', 'content'
+        added_at: { unique: false }
+      }
+    }
+  }
+};
+```
+
+### Single Item Record (Handles Everything)
+```javascript
+// Universal item record - handles links, images, and content
+{
+  id: 'item_1234567890',
+  investigation_id: 'inv_1234567890', 
+  type: 'link' | 'image' | 'content',
+  
+  // Common fields
+  url: 'https://example.com',
+  title: 'Page Title',
+  added_at: '2025-07-31T10:30:00Z',
+  
+  // Type-specific data
+  data: {
+    // For type='link': just URL and title
+    // For type='image': { imageBlob: Blob, filename: 'image.jpg' }
+    // For type='content': { text: 'full page text content' }
+  }
+}
+```
+
+## Minimal Chrome Extension Structure
+
+```
+LP-Investigator/
+├── manifest.json (add contextMenus permission)
+├── background.js (minimal service worker)
+├── popup.html/js/css (your existing UI, barely modified)
+├── db.js (simple IndexedDB wrapper)
+└── content-extractor.js (page text extraction)
+```
+
+## Implementation Files
+
+### 1. Simple Database (db.js)
+```javascript
+class SimpleDB {
+  constructor() {
+    this.db = null;
+  }
+
+  async init() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('SimpleInvestigationDB', 1);
+      
+      request.onsuccess = () => {
+        this.db = request.result;
+        resolve();
+      };
+      
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        
+        // Investigations store
+        db.createObjectStore('investigations', { keyPath: 'id' });
+        
+        // Universal items store
+        const itemStore = db.createObjectStore('items', { keyPath: 'id' });
+        itemStore.createIndex('investigation_id', 'investigation_id');
+        itemStore.createIndex('type', 'type');
+        itemStore.createIndex('added_at', 'added_at');
+      };
+    });
+  }
+
+  // Add any item (link, image, or content)
+  async addItem(item) {
+    const transaction = this.db.transaction(['items'], 'readwrite');
+    return transaction.objectStore('items').add(item);
+  }
+
+  // Get all items for an investigation
+  async getItems(investigationId) {
+    const transaction = this.db.transaction(['items'], 'readonly');
+    const store = transaction.objectStore('items');
+    const index = store.index('investigation_id');
+    
+    return new Promise((resolve) => {
+      const request = index.getAll(investigationId);
+      request.onsuccess = () => resolve(request.result);
+    });
+  }
+
+  // Investigation management (same as before)
+  async addInvestigation(investigation) {
+    const transaction = this.db.transaction(['investigations'], 'readwrite');
+    return transaction.objectStore('investigations').add(investigation);
+  }
+
+  async getInvestigations() {
+    const transaction = this.db.transaction(['investigations'], 'readonly');
+    const store = transaction.objectStore('investigations');
+    
+    return new Promise((resolve) => {
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result);
+    });
+  }
+}
+```
+
+### 2. Updated manifest.json
+```json
+{
+  "manifest_version": 3,
+  "name": "Investigation Tool",
+  "version": "2.0",
+  "description": "Save links, images, and page content for investigations",
+  "permissions": [
+    "tabs",
+    "storage", 
+    "contextMenus",
+    "activeTab"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
+```
+
+### 3. Enhanced Background Worker (background.js)
+```javascript
+// Import your simple DB
+importScripts('db.js');
+
+let db = new SimpleDB();
+let isRecording = false;
+let currentInvestigation = null;
+
+// Initialize database
+db.init();
+
+// Create context menus
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: "save-link",
+    title: "Save Link to Investigation",
+    contexts: ["link"]
+  });
+
+  chrome.contextMenus.create({
+    id: "save-image", 
+    title: "Save Image to Investigation",
+    contexts: ["image"]
+  });
+
+  chrome.contextMenus.create({
+    id: "save-page-content",
+    title: "Save Full Page Content", 
+    contexts: ["page"]
+  });
+});
+
+// Handle context menu clicks
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (!currentInvestigation) {
+    console.log('No investigation selected');
+    return;
+  }
+
+  const timestamp = Date.now();
+  const itemId = `item_${timestamp}`;
+
+  if (info.menuItemId === "save-link") {
+    // Save link
+    const item = {
+      id: itemId,
+      investigation_id: currentInvestigation,
+      type: 'link',
+      url: info.linkUrl,
+      title: `Link from ${tab.title}`,
+      added_at: new Date().toISOString(),
+      data: {}
+    };
+    await db.addItem(item);
+  }
+  
+  else if (info.menuItemId === "save-image") {
+    // Download and save image
+    try {
+      const response = await fetch(info.srcUrl);
+      const imageBlob = await response.blob();
+      const filename = info.srcUrl.split('/').pop() || 'image.jpg';
+      
+      const item = {
+        id: itemId,
+        investigation_id: currentInvestigation,
+        type: 'image',
+        url: info.srcUrl,
+        title: filename,
+        added_at: new Date().toISOString(),
+        data: {
+          imageBlob: imageBlob,
+          filename: filename,
+          sourceUrl: tab.url
+        }
+      };
+      await db.addItem(item);
+    } catch (error) {
+      console.error('Failed to save image:', error);
+    }
+  }
+  
+  else if (info.menuItemId === "save-page-content") {
+    // Extract full page content
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        function: extractPageContent
+      });
+      
+      const pageText = results[0].result;
+      
+      const item = {
+        id: itemId,
+        investigation_id: currentInvestigation,
+        type: 'content',
+        url: tab.url,
+        title: tab.title,
+        added_at: new Date().toISOString(),
+        data: {
+          text: pageText,
+          extractedFrom: tab.url
+        }
+      };
+      await db.addItem(item);
+    } catch (error) {
+      console.error('Failed to extract page content:', error);
+    }
+  }
+});
+
+// Function injected into page to extract content
+function extractPageContent() {
+  // Remove script and style elements
+  const scripts = document.querySelectorAll('script, style, nav, header, footer');
+  scripts.forEach(el => el.remove());
+  
+  // Get main content
+  const main = document.querySelector('main') || 
+                document.querySelector('[role="main"]') || 
+                document.querySelector('.content') ||
+                document.body;
+  
+  return main.innerText.trim();
+}
+
+// Handle messages from popup (same as your existing code)
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  switch (message.type) {
+    case 'START_RECORDING':
+      isRecording = true;
+      currentInvestigation = message.investigationId;
+      sendResponse({ success: true });
+      break;
+      
+    case 'STOP_RECORDING':
+      isRecording = false;
+      currentInvestigation = null;
+      sendResponse({ success: true });
+      break;
+      
+    case 'CREATE_INVESTIGATION':
+      const investigation = {
+        id: `inv_${Date.now()}`,
+        name: message.name,
+        created_at: new Date().toISOString()
+      };
+      db.addInvestigation(investigation).then(() => {
+        sendResponse({ investigation });
+      });
+      return true;
+      
+    case 'GET_STATE':
+      db.getInvestigations().then(investigations => {
+        sendResponse({ 
+          isRecording, 
+          currentInvestigation, 
+          investigations 
+        });
+      });
+      return true;
+      
+    case 'GET_ITEMS':
+      db.getItems(message.investigationId).then(items => {
+        sendResponse({ items });
+      });
+      return true;
+  }
+});
+
+// Auto-record URLs when recording (same as your existing code)
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (isRecording && currentInvestigation && changeInfo.status === 'complete' && tab.url && tab.url.startsWith('http')) {
+    const item = {
+      id: `item_${Date.now()}`,
+      investigation_id: currentInvestigation,
+      type: 'link',
+      url: tab.url,
+      title: tab.title,
+      added_at: new Date().toISOString(),
+      data: { autoRecorded: true }
+    };
+    await db.addItem(item);
+  }
+});
+```
+
+### 4. Minimal Popup Updates (popup.js changes)
+```javascript
+// Add this to your existing popup.js
+
+// Display items with type icons
+function displayItems(items) {
+  const urlList = document.getElementById('url-list');
+  urlList.innerHTML = '';
+  
+  items.forEach(item => {
+    const li = document.createElement('li');
+    
+    let icon = '';
+    let displayText = '';
+    
+    if (item.type === 'link') {
+      icon = '🔗';
+      displayText = item.title || item.url;
+    } else if (item.type === 'image') {
+      icon = '📸';
+      displayText = item.data.filename || 'Image';
+    } else if (item.type === 'content') {
+      icon = '📄';
+      displayText = `Content from ${item.title}`;
+    }
+    
+    li.innerHTML = `
+      ${icon} <a href="${item.url}" target="_blank">${displayText}</a>
+      <small style="display: block; color: #666;">
+        Added: ${new Date(item.added_at).toLocaleString()}
+      </small>
+    `;
+    
+    urlList.appendChild(li);
+  });
+}
+
+// Update your existing refreshState function to load items
+function refreshState() {
+  chrome.runtime.sendMessage({ type: 'GET_STATE' }, (response) => {
+    updateUI(response);
+    
+    // Load items for selected investigation
+    const selectedInv = isRecording ? currentInvestigation : getSelectedInvestigation();
+    if (selectedInv) {
+      chrome.runtime.sendMessage({ 
+        type: 'GET_ITEMS', 
+        investigationId: selectedInv 
+      }, (itemsResponse) => {
+        displayItems(itemsResponse.items || []);
+      });
+    }
+  });
+}
+```
+
+## How It Works
+
+### 1. Right-Click Anywhere
+- **Right-click link** → Save URL 
+- **Right-click image** → Download and save image blob
+- **Right-click page** → Extract all text content and save
+
+### 2. Auto-Recording (Your Existing Feature)
+- Start recording → All visited URLs saved automatically
+- Manual right-clicks still work during recording
+
+### 3. Simple Storage
+- Everything goes into one `items` table
+- Type field distinguishes links/images/content
+- All associated with investigation folders
+
+### 4. View Results
+- Your existing popup shows all items with icons
+- 🔗 for links, 📸 for images, 📄 for page content
+- Click any item to open original URL
+
+## Key Benefits
+
+✅ **Dead Simple** - Only 3 actions, minimal UI changes  
+✅ **No Processing** - Just raw storage, no OCR or text extraction  
+✅ **Fast** - Everything happens instantly  
+✅ **Reliable** - No complex background workers to break  
+✅ **Visual** - See exactly what you collected with type icons
+
+This gives you the core investigation workflow with minimal complexity. You can always add text processing later, but this gets you collecting data immediately!

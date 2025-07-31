@@ -1,0 +1,345 @@
+# SIMPLE TEXT CAPTURE PLAN FOR LP-INVESTIGATOR
+
+## Goal: Add Button to Save Full Page Text
+
+### What We're Adding:
+1. **Save Page Text Button** - One-click to capture current page text
+2. **IndexedDB Storage** - Store text content locally
+3. **View Saved Text** - Display captured text in popup
+
+## Implementation Overview
+
+### Step 1: Update Your Current Setup
+Your current extension uses chrome.storage.local with folders. We'll:
+- Keep your existing folder system
+- Add IndexedDB alongside for text storage
+- Add one button to save page text
+
+### Step 2: Simple IndexedDB Schema
+```javascript
+// Database: LPInvestigatorDB
+// Single table for saved page content
+{
+  id: 'page_1234567890',
+  folderName: 'My Investigation',  // Links to your existing folders
+  url: 'https://example.com',
+  title: 'Page Title',
+  text: 'Full extracted page text...',
+  savedAt: '2025-07-31T10:30:00Z'
+}
+```
+
+## Files to Create/Modify
+
+### 1. NEW FILE: db.js - Simple IndexedDB Wrapper
+```javascript
+class SimpleDB {
+  constructor() {
+    this.db = null;
+  }
+
+  async init() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('LPInvestigatorDB', 1);
+      
+      request.onsuccess = () => {
+        this.db = request.result;
+        resolve();
+      };
+      
+      request.onerror = () => reject(request.error);
+      
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains('pageContent')) {
+          const store = db.createObjectStore('pageContent', { keyPath: 'id' });
+          store.createIndex('folderName', 'folderName', { unique: false });
+          store.createIndex('savedAt', 'savedAt', { unique: false });
+        }
+      };
+    });
+  }
+
+  async savePageContent(content) {
+    const transaction = this.db.transaction(['pageContent'], 'readwrite');
+    const store = transaction.objectStore('pageContent');
+    return store.add(content);
+  }
+
+  async getContentByFolder(folderName) {
+    const transaction = this.db.transaction(['pageContent'], 'readonly');
+    const store = transaction.objectStore('pageContent');
+    const index = store.index('folderName');
+    
+    return new Promise((resolve) => {
+      const request = index.getAll(folderName);
+      request.onsuccess = () => resolve(request.result);
+    });
+  }
+
+  async deleteContent(id) {
+    const transaction = this.db.transaction(['pageContent'], 'readwrite');
+    const store = transaction.objectStore('pageContent');
+    return store.delete(id);
+  }
+}
+```
+
+### 2. UPDATE: manifest.json - Add activeTab Permission
+```json
+{
+  "manifest_version": 3,
+  "name": "LP-Investigator",
+  "version": "1.1",
+  "description": "Record and export a list of websites visited during a session.",
+  "permissions": [
+    "tabs",
+    "storage",
+    "activeTab"  // ADD THIS LINE
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
+```
+
+### 3. UPDATE: background.js - Add Text Capture Support
+```javascript
+// Add at the top of your existing background.js
+importScripts('db.js');
+
+// Initialize database
+let db = new SimpleDB();
+db.init().catch(console.error);
+
+// Add these message handlers to your existing ones:
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // ... keep your existing handlers ...
+  
+  // ADD THIS: Handler for saving page text
+  if (message.type === 'SAVE_PAGE_TEXT') {
+    chrome.tabs.query({active: true, currentWindow: true}, async (tabs) => {
+      if (!tabs[0]) {
+        sendResponse({ success: false, error: 'No active tab' });
+        return;
+      }
+      
+      const tab = tabs[0];
+      
+      try {
+        // Inject content extractor and get text
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: extractPageText
+        });
+        
+        const pageText = results[0].result;
+        
+        // Save to IndexedDB
+        const content = {
+          id: `page_${Date.now()}`,
+          folderName: message.folderName,
+          url: tab.url,
+          title: tab.title,
+          text: pageText,
+          savedAt: new Date().toISOString()
+        };
+        
+        await db.savePageContent(content);
+        sendResponse({ success: true, content });
+        
+      } catch (error) {
+        console.error('Failed to save page text:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    });
+    
+    return true; // Keep message channel open
+  }
+  
+  // ADD THIS: Handler for getting saved content
+  if (message.type === 'GET_SAVED_CONTENT') {
+    db.getContentByFolder(message.folderName).then(content => {
+      sendResponse({ success: true, content });
+    }).catch(error => {
+      sendResponse({ success: false, error: error.message });
+    });
+    return true;
+  }
+});
+
+// ADD THIS: Text extraction function
+function extractPageText() {
+  const bodyClone = document.body.cloneNode(true);
+  const unwanted = bodyClone.querySelectorAll('script, style, noscript, iframe, object, embed, nav, header, footer, aside');
+  unwanted.forEach(el => el.remove());
+  
+  let contentElement = bodyClone.querySelector('main') || 
+                      bodyClone.querySelector('article') ||
+                      bodyClone.querySelector('[role="main"]') ||
+                      bodyClone.querySelector('.content') ||
+                      bodyClone.querySelector('#content') ||
+                      bodyClone;
+  
+  let text = contentElement.innerText || contentElement.textContent || '';
+  text = text.replace(/\n{3,}/g, '\n\n').replace(/\s{2,}/g, ' ').trim();
+  
+  return text;
+}
+```
+
+### 4. UPDATE: popup.html - Add Save Text Button
+```html
+<!-- Add this button after your existing buttons -->
+<button id="save-text" class="action-btn" title="Save current page text">
+  📄 Save Page Text
+</button>
+
+<!-- Add this section after your URL list -->
+<div id="saved-content" style="display: none; margin-top: 20px;">
+  <h3>Saved Page Content</h3>
+  <div id="content-list"></div>
+</div>
+```
+
+### 5. UPDATE: popup.js - Add Button Handler
+```javascript
+// Add inside your DOMContentLoaded event listener:
+const saveTextBtn = document.getElementById('save-text');
+
+// Button click handler
+saveTextBtn.addEventListener('click', async () => {
+  const selectedFolder = getChosenFolder();
+  if (!selectedFolder) {
+    statusDiv.textContent = 'Please select a folder first';
+    return;
+  }
+  
+  statusDiv.textContent = 'Saving page text...';
+  
+  chrome.runtime.sendMessage({
+    type: 'SAVE_PAGE_TEXT',
+    folderName: selectedFolder
+  }, (response) => {
+    if (response.success) {
+      statusDiv.textContent = 'Page text saved!';
+      refreshState();
+    } else {
+      statusDiv.textContent = 'Failed to save: ' + response.error;
+    }
+  });
+});
+
+// Add to your existing updateUI function:
+function updateUI(state) {
+  // ... your existing code ...
+  
+  // Enable/disable save text button
+  const saveTextBtn = document.getElementById('save-text');
+  saveTextBtn.disabled = !getChosenFolder();
+  
+  // Load saved content
+  const selectedFolder = isRecording ? currentFolder : getChosenFolder();
+  if (selectedFolder) {
+    chrome.runtime.sendMessage({
+      type: 'GET_SAVED_CONTENT',
+      folderName: selectedFolder
+    }, (response) => {
+      if (response.success && response.content.length > 0) {
+        displaySavedContent(response.content);
+      } else {
+        document.getElementById('saved-content').style.display = 'none';
+      }
+    });
+  }
+}
+
+// New function to display saved content
+function displaySavedContent(contentArray) {
+  const contentList = document.getElementById('content-list');
+  const savedContentDiv = document.getElementById('saved-content');
+  
+  contentList.innerHTML = '';
+  
+  contentArray.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'saved-item';
+    div.innerHTML = `
+      <div style="margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+        <strong>📄 ${item.title}</strong><br>
+        <small>${item.url}</small><br>
+        <small>Saved: ${new Date(item.savedAt).toLocaleString()}</small><br>
+        <details style="margin-top: 5px;">
+          <summary>Preview (${item.text.length} chars)</summary>
+          <pre style="white-space: pre-wrap; max-height: 200px; overflow-y: auto; font-size: 12px; background: #f5f5f5; padding: 5px; margin-top: 5px;">
+${item.text.substring(0, 500)}${item.text.length > 500 ? '...' : ''}
+          </pre>
+        </details>
+      </div>
+    `;
+    contentList.appendChild(div);
+  });
+  
+  savedContentDiv.style.display = 'block';
+}
+```
+
+## HOW IT WORKS
+
+1. **Select a folder** in the popup
+2. **Navigate to any webpage** you want to save
+3. **Click "Save Page Text"** button in the popup
+4. **Text is extracted** from the page (removes ads, navigation, etc.)
+5. **Saved to IndexedDB** with the URL, title, and timestamp
+6. **View saved content** below your URL list
+
+## IMPLEMENTATION STEPS
+
+1. **Create db.js file** - Copy the SimpleDB class code
+2. **Update manifest.json** - Add "activeTab" permission
+3. **Update background.js** - Add the new handlers and extraction function
+4. **Update popup.html** - Add the button and content display area
+5. **Update popup.js** - Add button handler and display functions
+6. **Reload extension** - Test on any webpage
+
+## WHAT GETS SAVED
+
+- **URL**: The page address
+- **Title**: The page title
+- **Text**: Main content (articles, paragraphs, etc.)
+- **Timestamp**: When you saved it
+- **Folder**: Associated with your investigation folder
+
+## KEY BENEFITS
+
+✅ **One-click save** - Simple button in popup
+✅ **Clean text extraction** - Removes ads, navigation, scripts
+✅ **Local storage** - Everything stays on your computer
+✅ **Integrated with folders** - Works with your existing system
+✅ **Preview included** - See first 500 chars instantly
+
+## TESTING
+
+1. Load the extension
+2. Create or select a folder
+3. Go to any webpage
+4. Click extension icon
+5. Click "Save Page Text"
+6. See saved content appear below
+
+That's it! You now have full webpage text capture with minimal changes to your existing extension.
