@@ -108,7 +108,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     newFolderInput.addEventListener('input', () => {
-        updateUI({ folders, currentFolder, isRecording });
+        // Just update the create folder button state based on input
+        createFolderBtn.disabled = isRecording || !newFolderInput.value.trim();
     });
 
     // Toggle recording
