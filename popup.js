@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleBtn = document.getElementById('toggle-recording');
     const clearBtn = document.getElementById('clear-list');
     const copyBtn = document.getElementById('copy-list');
+    const copyAllContextBtn = document.getElementById('copy-all-context');
     const saveTextBtn = document.getElementById('save-text');
     const folderSelect = document.getElementById('folder-select');
     const newFolderInput = document.getElementById('new-folder');
@@ -57,9 +58,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 urlList.appendChild(li);
             });
             copyBtn.style.display = 'inline-block';
+            copyAllContextBtn.style.display = 'inline-block';
             clearBtn.style.display = 'inline-block';
         } else {
             copyBtn.style.display = 'none';
+            copyAllContextBtn.style.display = 'none';
             clearBtn.style.display = 'none';
         }
 
@@ -143,6 +146,48 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Copy all context (links + saved text)
+    copyAllContextBtn.addEventListener('click', () => {
+        const selectedFolder = isRecording ? currentFolder : getChosenFolder();
+        if (!selectedFolder || !folders[selectedFolder]) return;
+        
+        // Get saved content for this folder
+        chrome.runtime.sendMessage({
+            type: 'GET_SAVED_CONTENT',
+            folderName: selectedFolder
+        }, (response) => {
+            let contextText = `Investigation: ${selectedFolder}\n`;
+            contextText += `Generated: ${new Date().toLocaleString()}\n\n`;
+            
+            // Add URLs
+            contextText += `=== VISITED URLS ===\n`;
+            const urls = folders[selectedFolder] || [];
+            urls.forEach((url, index) => {
+                contextText += `${index + 1}. ${url}\n`;
+            });
+            
+            // Add saved page content
+            if (response && response.success && response.content && response.content.length > 0) {
+                contextText += `\n=== SAVED PAGE CONTENT ===\n\n`;
+                response.content.forEach((item, index) => {
+                    contextText += `--- Page ${index + 1} ---\n`;
+                    contextText += `Title: ${item.title}\n`;
+                    contextText += `URL: ${item.url}\n`;
+                    contextText += `Saved: ${new Date(item.savedAt).toLocaleString()}\n`;
+                    contextText += `Content:\n${item.text}\n\n`;
+                });
+            }
+            
+            // Copy to clipboard
+            navigator.clipboard.writeText(contextText).then(() => {
+                statusDiv.textContent = 'All context copied to clipboard!';
+                setTimeout(() => {
+                    statusDiv.textContent = '';
+                }, 2000);
+            });
+        });
+    });
+    
     // Clear folder
     clearBtn.addEventListener('click', () => {
         const selectedFolder = isRecording ? currentFolder : getChosenFolder();

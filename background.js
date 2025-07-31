@@ -19,11 +19,22 @@ chrome.storage.local.get(['folders'], (result) => {
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'GET_STATE') {
-        sendResponse({ isRecording, folders, currentFolder });
+        // Always get the latest data from storage
+        chrome.storage.local.get(['folders'], (result) => {
+            folders = result.folders || {};
+            sendResponse({ isRecording, folders, currentFolder });
+        });
+        return true; // Keep message channel open
     } else if (message.type === 'CREATE_FOLDER') {
-        folders[message.folderName] = [];
-        chrome.storage.local.set({ folders });
-        sendResponse({ success: true });
+        // Get latest folders before creating new one
+        chrome.storage.local.get(['folders'], (result) => {
+            folders = result.folders || {};
+            folders[message.folderName] = [];
+            chrome.storage.local.set({ folders }, () => {
+                sendResponse({ success: true });
+            });
+        });
+        return true; // Keep message channel open
     } else if (message.type === 'START_RECORDING') {
         // Get latest folders from storage first
         chrome.storage.local.get(['folders'], (result) => {
