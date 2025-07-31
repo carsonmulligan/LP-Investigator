@@ -25,12 +25,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chrome.storage.local.set({ folders });
         sendResponse({ success: true });
     } else if (message.type === 'START_RECORDING') {
-        isRecording = true;
-        currentFolder = message.folderName;
-        if (!folders[currentFolder]) {
-            folders[currentFolder] = [];
-        }
-        sendResponse({ success: true });
+        // Get latest folders from storage first
+        chrome.storage.local.get(['folders'], (result) => {
+            folders = result.folders || {};
+            isRecording = true;
+            currentFolder = message.folderName;
+            if (!folders[currentFolder]) {
+                folders[currentFolder] = [];
+            }
+            // Save the updated state immediately
+            chrome.storage.local.set({ folders }, () => {
+                sendResponse({ success: true });
+            });
+        });
+        return true; // Keep message channel open
     } else if (message.type === 'STOP_RECORDING') {
         isRecording = false;
         currentFolder = null;
@@ -94,12 +102,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Listen for tab updates (navigation)
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (isRecording && currentFolder && changeInfo.status === 'complete' && tab.url && isHttpUrl(tab.url)) {
-        // Avoid consecutive duplicates
-        const folderUrls = folders[currentFolder] || [];
-        if (folderUrls.length === 0 || folderUrls[folderUrls.length - 1] !== tab.url) {
-            folders[currentFolder].push(tab.url);
-            chrome.storage.local.set({ folders });
-        }
+        // Get latest folders data from storage to ensure we don't lose URLs
+        chrome.storage.local.get(['folders'], (result) => {
+            folders = result.folders || {};
+            
+            // Ensure the folder exists
+            if (!folders[currentFolder]) {
+                folders[currentFolder] = [];
+            }
+            
+            // Avoid consecutive duplicates
+            const folderUrls = folders[currentFolder];
+            if (folderUrls.length === 0 || folderUrls[folderUrls.length - 1] !== tab.url) {
+                folders[currentFolder].push(tab.url);
+                chrome.storage.local.set({ folders });
+            }
+        });
     }
 });
 
