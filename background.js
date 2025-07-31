@@ -106,4 +106,23 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 // Helper to check if URL is http/https
 function isHttpUrl(url) {
     return url.startsWith('http://') || url.startsWith('https://');
+}
+
+// Text extraction function
+function extractPageText() {
+    const bodyClone = document.body.cloneNode(true);
+    const unwanted = bodyClone.querySelectorAll('script, style, noscript, iframe, object, embed, nav, header, footer, aside');
+    unwanted.forEach(el => el.remove());
+    
+    let contentElement = bodyClone.querySelector('main') || 
+                        bodyClone.querySelector('article') ||
+                        bodyClone.querySelector('[role="main"]') ||
+                        bodyClone.querySelector('.content') ||
+                        bodyClone.querySelector('#content') ||
+                        bodyClone;
+    
+    let text = contentElement.innerText || contentElement.textContent || '';
+    text = text.replace(/\n{3,}/g, '\n\n').replace(/\s{2,}/g, ' ').trim();
+    
+    return text;
 } 
