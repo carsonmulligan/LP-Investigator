@@ -68,9 +68,27 @@ document.addEventListener('DOMContentLoaded', () => {
         folderSelect.disabled = isRecording;
         newFolderInput.disabled = isRecording;
         createFolderBtn.disabled = isRecording || !newFolderInput.value.trim();
+        saveTextBtn.disabled = !getChosenFolder();
         statusDiv.textContent = isRecording
             ? `Recording in folder: ${currentFolder || ''}`
             : '';
+            
+        // Load saved content
+        const selectedFolder = isRecording ? currentFolder : getChosenFolder();
+        if (selectedFolder) {
+            chrome.runtime.sendMessage({
+                type: 'GET_SAVED_CONTENT',
+                folderName: selectedFolder
+            }, (response) => {
+                if (response && response.success && response.content && response.content.length > 0) {
+                    displaySavedContent(response.content);
+                } else {
+                    document.getElementById('saved-content').style.display = 'none';
+                }
+            });
+        } else {
+            document.getElementById('saved-content').style.display = 'none';
+        }
     }
 
     function refreshState() {
@@ -134,6 +152,58 @@ document.addEventListener('DOMContentLoaded', () => {
             refreshState();
         });
     });
+    
+    // Save page text button handler
+    saveTextBtn.addEventListener('click', async () => {
+        const selectedFolder = getChosenFolder();
+        if (!selectedFolder) {
+            statusDiv.textContent = 'Please select a folder first';
+            return;
+        }
+        
+        statusDiv.textContent = 'Saving page text...';
+        
+        chrome.runtime.sendMessage({
+            type: 'SAVE_PAGE_TEXT',
+            folderName: selectedFolder
+        }, (response) => {
+            if (response && response.success) {
+                statusDiv.textContent = 'Page text saved!';
+                refreshState();
+            } else {
+                statusDiv.textContent = 'Failed to save: ' + (response ? response.error : 'Unknown error');
+            }
+        });
+    });
+    
+    // Function to display saved content
+    function displaySavedContent(contentArray) {
+        const contentList = document.getElementById('content-list');
+        const savedContentDiv = document.getElementById('saved-content');
+        
+        contentList.innerHTML = '';
+        
+        contentArray.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'saved-item';
+            div.innerHTML = `
+                <div style="margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                    <strong>📄 ${item.title}</strong><br>
+                    <small>${item.url}</small><br>
+                    <small>Saved: ${new Date(item.savedAt).toLocaleString()}</small><br>
+                    <details style="margin-top: 5px;">
+                        <summary>Preview (${item.text.length} chars)</summary>
+                        <pre style="white-space: pre-wrap; max-height: 200px; overflow-y: auto; font-size: 12px; background: #f5f5f5; padding: 5px; margin-top: 5px;">
+${item.text.substring(0, 500)}${item.text.length > 500 ? '...' : ''}
+                        </pre>
+                    </details>
+                </div>
+            `;
+            contentList.appendChild(div);
+        });
+        
+        savedContentDiv.style.display = 'block';
+    }
 
     refreshState();
 });
