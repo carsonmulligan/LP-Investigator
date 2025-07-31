@@ -40,6 +40,53 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         delete folders[message.folderName];
         chrome.storage.local.set({ folders });
         sendResponse({ success: true });
+    } else if (message.type === 'SAVE_PAGE_TEXT') {
+        // Handler for saving page text
+        chrome.tabs.query({active: true, currentWindow: true}, async (tabs) => {
+            if (!tabs[0]) {
+                sendResponse({ success: false, error: 'No active tab' });
+                return;
+            }
+            
+            const tab = tabs[0];
+            
+            try {
+                // Inject content extractor and get text
+                const results = await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    func: extractPageText
+                });
+                
+                const pageText = results[0].result;
+                
+                // Save to IndexedDB
+                const content = {
+                    id: `page_${Date.now()}`,
+                    folderName: message.folderName,
+                    url: tab.url,
+                    title: tab.title,
+                    text: pageText,
+                    savedAt: new Date().toISOString()
+                };
+                
+                await db.savePageContent(content);
+                sendResponse({ success: true, content });
+                
+            } catch (error) {
+                console.error('Failed to save page text:', error);
+                sendResponse({ success: false, error: error.message });
+            }
+        });
+        
+        return true; // Keep message channel open
+    } else if (message.type === 'GET_SAVED_CONTENT') {
+        // Handler for getting saved content
+        db.getContentByFolder(message.folderName).then(content => {
+            sendResponse({ success: true, content });
+        }).catch(error => {
+            sendResponse({ success: false, error: error.message });
+        });
+        return true;
     }
     return true;
 });
