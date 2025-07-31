@@ -1,26 +1,39 @@
 // background.js for LP-Investigator Chrome Extension 
 
 let isRecording = false;
-let visitedUrls = [];
+let folders = {};
+let currentFolder = null;
+
+// Initialize from storage
+chrome.storage.local.get(['folders'], (result) => {
+    if (result.folders) {
+        folders = result.folders;
+    }
+});
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'TOGGLE_RECORDING') {
-        isRecording = !isRecording;
-        if (!isRecording) {
-            // Save the list when stopping
-            chrome.storage.local.set({ visitedUrls });
-        } else {
-            // Reset the list when starting
-            visitedUrls = [];
-            chrome.storage.local.set({ visitedUrls });
+    if (message.type === 'GET_STATE') {
+        sendResponse({ isRecording, folders, currentFolder });
+    } else if (message.type === 'CREATE_FOLDER') {
+        folders[message.folderName] = [];
+        chrome.storage.local.set({ folders });
+        sendResponse({ success: true });
+    } else if (message.type === 'START_RECORDING') {
+        isRecording = true;
+        currentFolder = message.folderName;
+        if (!folders[currentFolder]) {
+            folders[currentFolder] = [];
         }
-        sendResponse({ isRecording });
-    } else if (message.type === 'GET_STATE') {
-        sendResponse({ isRecording, visitedUrls });
-    } else if (message.type === 'CLEAR_LIST') {
-        visitedUrls = [];
-        chrome.storage.local.set({ visitedUrls });
+        sendResponse({ success: true });
+    } else if (message.type === 'STOP_RECORDING') {
+        isRecording = false;
+        currentFolder = null;
+        chrome.storage.local.set({ folders });
+        sendResponse({ success: true });
+    } else if (message.type === 'CLEAR_FOLDER') {
+        delete folders[message.folderName];
+        chrome.storage.local.set({ folders });
         sendResponse({ success: true });
     }
     return true;
@@ -28,11 +41,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Listen for tab updates (navigation)
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (isRecording && changeInfo.status === 'complete' && tab.url && isHttpUrl(tab.url)) {
+    if (isRecording && currentFolder && changeInfo.status === 'complete' && tab.url && isHttpUrl(tab.url)) {
         // Avoid consecutive duplicates
-        if (visitedUrls.length === 0 || visitedUrls[visitedUrls.length - 1] !== tab.url) {
-            visitedUrls.push(tab.url);
-            chrome.storage.local.set({ visitedUrls });
+        const folderUrls = folders[currentFolder] || [];
+        if (folderUrls.length === 0 || folderUrls[folderUrls.length - 1] !== tab.url) {
+            folders[currentFolder].push(tab.url);
+            chrome.storage.local.set({ folders });
         }
     }
 });
