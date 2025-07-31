@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleBtn = document.getElementById('toggle-recording');
     const clearBtn = document.getElementById('clear-list');
     const copyBtn = document.getElementById('copy-list');
+    const saveTextBtn = document.getElementById('save-text');
     const folderSelect = document.getElementById('folder-select');
     const newFolderInput = document.getElementById('new-folder');
     const createFolderBtn = document.getElementById('create-folder');
