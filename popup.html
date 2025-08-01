@@ -30,10 +30,17 @@
             <button id="copy-all-context" class="action-btn" style="display:none;" title="Copy all links and saved text">📋 Copy All Context</button>
             <button id="clear-list" class="action-btn" style="display:none;">Clear Folder</button>
             <button id="save-text" class="action-btn" title="Save current page text">📄 Save Page Text</button>
+            <button id="upload-image" class="action-btn" title="Upload image to folder">🖼️ Upload Image</button>
         </div>
+        <!-- Hidden file input for image upload -->
+        <input type="file" id="image-input" accept="image/*" style="display: none;" />
         <div id="saved-content" style="display: none; margin-top: 20px;">
             <h3>Saved Page Content</h3>
             <div id="content-list"></div>
+        </div>
+        <div id="saved-images" style="display: none; margin-top: 20px;">
+            <h3>Uploaded Images</h3>
+            <div id="image-list"></div>
         </div>
     </div>
     <script src="popup.js"></script>

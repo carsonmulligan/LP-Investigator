@@ -7,7 +7,11 @@ let currentFolder = null;
 
 // Initialize database
 let db = new SimpleDB();
-db.init().catch(console.error);
+
+// Force database recreation to include the new images store
+indexedDB.deleteDatabase('LPInvestigatorDB').onsuccess = () => {
+    db.init().catch(console.error);
+};
 
 // Initialize from storage
 chrome.storage.local.get(['folders'], (result) => {
@@ -73,7 +77,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 // Inject content extractor and get text
                 const results = await chrome.scripting.executeScript({
                     target: { tabId: tab.id },
-                    func: extractPageText
+                    func: () => {
+                        const bodyClone = document.body.cloneNode(true);
+                        const unwanted = bodyClone.querySelectorAll('script, style, noscript, iframe, object, embed, nav, header, footer, aside');
+                        unwanted.forEach(el => el.remove());
+                        
+                        let contentElement = bodyClone.querySelector('main') || 
+                                            bodyClone.querySelector('article') ||
+                                            bodyClone.querySelector('[role="main"]') ||
+                                            bodyClone.querySelector('.content') ||
+                                            bodyClone.querySelector('#content') ||
+                                            bodyClone;
+                        
+                        let text = contentElement.innerText || contentElement.textContent || '';
+                        text = text.replace(/\n{3,}/g, '\n\n').replace(/\s{2,}/g, ' ').trim();
+                        
+                        return text;
+                    }
                 });
                 
                 const pageText = results[0].result;
@@ -102,6 +122,48 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Handler for getting saved content
         db.getContentByFolder(message.folderName).then(content => {
             sendResponse({ success: true, content });
+        }).catch(error => {
+            sendResponse({ success: false, error: error.message });
+        });
+        return true;
+    } else if (message.type === 'DELETE_SAVED_CONTENT') {
+        // Handler for deleting saved content
+        db.deleteContent(message.contentId).then(() => {
+            sendResponse({ success: true });
+        }).catch(error => {
+            sendResponse({ success: false, error: error.message });
+        });
+        return true;
+    } else if (message.type === 'SAVE_IMAGE') {
+        // Handler for saving uploaded images
+        const imageData = {
+            id: `image_${Date.now()}`,
+            folderName: message.folderName,
+            fileName: message.fileName,
+            fileType: message.fileType,
+            imageData: message.imageData,
+            size: message.imageData.length,
+            uploadedAt: new Date().toISOString()
+        };
+        
+        db.saveImage(imageData).then(() => {
+            sendResponse({ success: true, imageData });
+        }).catch(error => {
+            sendResponse({ success: false, error: error.message });
+        });
+        return true;
+    } else if (message.type === 'GET_SAVED_IMAGES') {
+        // Handler for getting saved images
+        db.getImagesByFolder(message.folderName).then(images => {
+            sendResponse({ success: true, images });
+        }).catch(error => {
+            sendResponse({ success: false, error: error.message });
+        });
+        return true;
+    } else if (message.type === 'DELETE_SAVED_IMAGE') {
+        // Handler for deleting saved images
+        db.deleteImage(message.imageId).then(() => {
+            sendResponse({ success: true });
         }).catch(error => {
             sendResponse({ success: false, error: error.message });
         });
@@ -136,22 +198,3 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 function isHttpUrl(url) {
     return url.startsWith('http://') || url.startsWith('https://');
 }
-
-// Text extraction function
-function extractPageText() {
-    const bodyClone = document.body.cloneNode(true);
-    const unwanted = bodyClone.querySelectorAll('script, style, noscript, iframe, object, embed, nav, header, footer, aside');
-    unwanted.forEach(el => el.remove());
-    
-    let contentElement = bodyClone.querySelector('main') || 
-                        bodyClone.querySelector('article') ||
-                        bodyClone.querySelector('[role="main"]') ||
-                        bodyClone.querySelector('.content') ||
-                        bodyClone.querySelector('#content') ||
-                        bodyClone;
-    
-    let text = contentElement.innerText || contentElement.textContent || '';
-    text = text.replace(/\n{3,}/g, '\n\n').replace(/\s{2,}/g, ' ').trim();
-    
-    return text;
-} 

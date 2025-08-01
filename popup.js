@@ -6,6 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const copyBtn = document.getElementById('copy-list');
     const copyAllContextBtn = document.getElementById('copy-all-context');
     const saveTextBtn = document.getElementById('save-text');
+    const uploadImageBtn = document.getElementById('upload-image');
+    const imageInput = document.getElementById('image-input');
     const folderSelect = document.getElementById('folder-select');
     const newFolderInput = document.getElementById('new-folder');
     const createFolderBtn = document.getElementById('create-folder');
@@ -72,11 +74,12 @@ document.addEventListener('DOMContentLoaded', () => {
         newFolderInput.disabled = isRecording;
         createFolderBtn.disabled = isRecording || !newFolderInput.value.trim();
         saveTextBtn.disabled = !getChosenFolder();
+        uploadImageBtn.disabled = !getChosenFolder();
         statusDiv.textContent = isRecording
             ? `Recording in folder: ${currentFolder || ''}`
             : '';
             
-        // Load saved content - reuse the selectedFolder variable
+        // Load saved content
         if (selectedFolder) {
             chrome.runtime.sendMessage({
                 type: 'GET_SAVED_CONTENT',
@@ -88,8 +91,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.getElementById('saved-content').style.display = 'none';
                 }
             });
+
+            // Load saved images
+            chrome.runtime.sendMessage({
+                type: 'GET_SAVED_IMAGES',
+                folderName: selectedFolder
+            }, (response) => {
+                if (response && response.success && response.images && response.images.length > 0) {
+                    displaySavedImages(response.images);
+                } else {
+                    document.getElementById('saved-images').style.display = 'none';
+                }
+            });
         } else {
             document.getElementById('saved-content').style.display = 'none';
+            document.getElementById('saved-images').style.display = 'none';
         }
     }
 
@@ -224,6 +240,64 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // Upload image button handler
+    uploadImageBtn.addEventListener('click', () => {
+        const selectedFolder = getChosenFolder();
+        if (!selectedFolder) {
+            statusDiv.textContent = 'Please select a folder first';
+            return;
+        }
+        imageInput.click();
+    });
+
+    // Handle file selection
+    imageInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const selectedFolder = getChosenFolder();
+        if (!selectedFolder) {
+            statusDiv.textContent = 'Please select a folder first';
+            return;
+        }
+
+        // Check if file is an image
+        if (!file.type.startsWith('image/')) {
+            statusDiv.textContent = 'Please select an image file';
+            return;
+        }
+
+        // Check file size (limit to 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            statusDiv.textContent = 'Image file too large (max 5MB)';
+            return;
+        }
+
+        statusDiv.textContent = 'Uploading image...';
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const imageData = e.target.result;
+            
+            chrome.runtime.sendMessage({
+                type: 'SAVE_IMAGE',
+                folderName: selectedFolder,
+                imageData: imageData,
+                fileName: file.name,
+                fileType: file.type
+            }, (response) => {
+                if (response && response.success) {
+                    statusDiv.textContent = 'Image uploaded successfully!';
+                    imageInput.value = ''; // Clear the input
+                    refreshState();
+                } else {
+                    statusDiv.textContent = 'Failed to upload: ' + (response ? response.error : 'Unknown error');
+                }
+            });
+        };
+        reader.readAsDataURL(file);
+    });
     
     // Function to display saved content
     function displaySavedContent(contentArray) {
@@ -236,7 +310,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const div = document.createElement('div');
             div.className = 'saved-item';
             div.innerHTML = `
-                <div style="margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                <div style="margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; position: relative;">
+                    <button class="delete-btn" data-id="${item.id}" title="Delete this saved content" style="position: absolute; top: 5px; right: 5px; background: #ff4444; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center;">×</button>
                     <strong>📄 ${item.title}</strong><br>
                     <small>${item.url}</small><br>
                     <small>Saved: ${new Date(item.savedAt).toLocaleString()}</small><br>
@@ -251,7 +326,149 @@ ${item.text.substring(0, 500)}${item.text.length > 500 ? '...' : ''}
             contentList.appendChild(div);
         });
         
+        // Add event listeners for delete buttons
+        contentList.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const contentId = btn.getAttribute('data-id');
+                if (confirm('Are you sure you want to delete this saved content?')) {
+                    deleteSavedContent(contentId);
+                }
+            });
+        });
+        
         savedContentDiv.style.display = 'block';
+    }
+
+    // Function to delete saved content
+    function deleteSavedContent(contentId) {
+        chrome.runtime.sendMessage({
+            type: 'DELETE_SAVED_CONTENT',
+            contentId: contentId
+        }, (response) => {
+            if (response && response.success) {
+                statusDiv.textContent = 'Content deleted!';
+                refreshState();
+            } else {
+                statusDiv.textContent = 'Failed to delete: ' + (response ? response.error : 'Unknown error');
+            }
+        });
+    }
+
+    // Function to display saved images
+    function displaySavedImages(imagesArray) {
+        const imageList = document.getElementById('image-list');
+        const savedImagesDiv = document.getElementById('saved-images');
+        
+        imageList.innerHTML = '';
+        
+        imagesArray.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'saved-image-item';
+            div.innerHTML = `
+                <div style="margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; position: relative;">
+                    <button class="delete-btn" data-id="${item.id}" title="Delete this image" style="position: absolute; top: 5px; right: 5px; background: #ff4444; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center;">×</button>
+                    <div style="margin-right: 30px;">
+                        <strong>🖼️ ${item.fileName}</strong><br>
+                        <small style="color: #666;">Uploaded: ${new Date(item.uploadedAt).toLocaleString()} | Size: ${(item.size / 1024).toFixed(1)} KB</small><br>
+                        <button class="view-image-btn" data-image="${item.imageData}" data-filename="${item.fileName}" style="margin-top: 5px; background: #0066cc; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer; font-size: 12px;">View Image</button>
+                    </div>
+                </div>
+            `;
+            imageList.appendChild(div);
+        });
+        
+        // Add event listeners for delete buttons
+        imageList.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const imageId = btn.getAttribute('data-id');
+                if (confirm('Are you sure you want to delete this image?')) {
+                    deleteSavedImage(imageId);
+                }
+            });
+        });
+
+        // Add event listeners for view image buttons
+        imageList.querySelectorAll('.view-image-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const imageData = btn.getAttribute('data-image');
+                const filename = btn.getAttribute('data-filename');
+                viewImage(imageData, filename);
+            });
+        });
+        
+        savedImagesDiv.style.display = 'block';
+    }
+
+    // Function to view image in new tab
+    function viewImage(imageData, filename) {
+        const newTab = window.open('', '_blank');
+        newTab.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>${filename}</title>
+                <style>
+                    body { 
+                        margin: 0; 
+                        padding: 20px; 
+                        background: #f5f5f5; 
+                        font-family: Arial, sans-serif;
+                        text-align: center;
+                    }
+                    img { 
+                        max-width: 100%; 
+                        max-height: 90vh; 
+                        border-radius: 8px;
+                        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                    }
+                    .header {
+                        margin-bottom: 20px;
+                        color: #333;
+                    }
+                    .download-btn {
+                        display: inline-block;
+                        margin-top: 15px;
+                        padding: 10px 20px;
+                        background: #0066cc;
+                        color: white;
+                        text-decoration: none;
+                        border-radius: 4px;
+                        font-weight: bold;
+                    }
+                    .download-btn:hover {
+                        background: #0052a3;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h2>${filename}</h2>
+                </div>
+                <img src="${imageData}" alt="${filename}">
+                <br>
+                <a href="${imageData}" download="${filename}" class="download-btn">Download Image</a>
+            </body>
+            </html>
+        `);
+        newTab.document.close();
+    }
+
+    // Function to delete saved image
+    function deleteSavedImage(imageId) {
+        chrome.runtime.sendMessage({
+            type: 'DELETE_SAVED_IMAGE',
+            imageId: imageId
+        }, (response) => {
+            if (response && response.success) {
+                statusDiv.textContent = 'Image deleted!';
+                refreshState();
+            } else {
+                statusDiv.textContent = 'Failed to delete: ' + (response ? response.error : 'Unknown error');
+            }
+        });
     }
 
     refreshState();

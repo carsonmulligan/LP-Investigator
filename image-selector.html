@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Image Area - LP Investigator</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .instructions {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196f3;
+        }
+        
+        .image-container {
+            position: relative;
+            display: inline-block;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+            cursor: crosshair;
+        }
+        
+        .selection-overlay {
+            position: absolute;
+            border: 2px dashed #00ff00;
+            background: rgba(0, 255, 0, 0.1);
+            display: none;
+            pointer-events: none;
+        }
+        
+        .controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        button {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 10px;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background: #1976d2;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .cancel-btn {
+            background: #f44336;
+        }
+        
+        .cancel-btn:hover {
+            background: #d32f2f;
+        }
+        
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .status.success {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+        
+        .status.error {
+            background: #ffcdd2;
+            color: #c62828;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📷 Select Image Area</h1>
+        
+        <div class="instructions">
+            <strong>Instructions:</strong> Click and drag on the image below to select the area you want to save. 
+            Press ESC to cancel.
+        </div>
+        
+        <div class="image-container" id="image-container">
+            <img id="captured-image" src="" alt="Captured screenshot">
+            <div class="selection-overlay" id="selection-overlay"></div>
+        </div>
+        
+        <div class="controls">
+            <button id="save-btn" disabled>�� Save Selected Area</button>
+            <button id="cancel-btn" class="cancel-btn">❌ Cancel</button>
+        </div>
+        
+        <div id="status"></div>
+    </div>
+
+    <script src="image-selector.js"></script>
+</body>
+</html> 
